@@ -24,7 +24,7 @@ import (
 	validator "gopkg.in/go-playground/validator.v9"
 )
 
-var statusBackend = api.NewGethStatusBackend()
+var statusBackend = api.NewNimbusStatusBackend()
 
 // OpenAccounts opens database and returns accounts list.
 func OpenAccounts(datadir string) string {

@@ -5,7 +5,6 @@ package nimbusbridge
 // https://golang.org/cmd/cgo/
 
 /*
-#cgo LDFLAGS: -Wl,-rpath,'$ORIGIN' -L${SRCDIR} -lnimbus -lpcre -lm
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdlib.h>
