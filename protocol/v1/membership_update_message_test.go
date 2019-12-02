@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/status-im/status-go/eth-node/crypto"
+	"github.com/status-im/status-go/protocol/protobuf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,12 +22,12 @@ var (
 				Signature: "7fca3d614cf55bc6cdf9c17fd1e65d1688673322bf1f004c58c78e0927edefea3d1053bf6a9d2e058ae88079f588105dccf2a2f9f330f6035cd47c715ee5950601",
 				Events: []MembershipUpdateEvent{
 					{
-						Type:       MembershipUpdateChatCreated,
+						Type:       protobuf.MembershipUpdateEvent_CHAT_CREATED,
 						Name:       "thathata",
 						ClockValue: 156897373998501,
 					},
 					{
-						Type:       MembershipUpdateMembersAdded,
+						Type:       protobuf.MembershipUpdateEvent_MEMBERS_ADDED,
 						Members:    []string{"0x04aebe2bb01a988abe7d978662f21de7760486119876c680e5a559e38e086a2df6dad41c4e4d9079c03db3bced6cb70fca76afc5650e50ea19b81572046a813534"},
 						ClockValue: 156897373998502,
 					},
@@ -42,7 +43,7 @@ func TestTupleMembershipUpdateEvent(t *testing.T) {
 	require.EqualValues(t, [][]interface{}{
 		{"clock-value", event1.ClockValue},
 		{"name", "thathata"},
-		{"type", "chat-created"},
+		{"type", protobuf.MembershipUpdateEvent_CHAT_CREATED},
 	}, result1)
 
 	event2 := testMembershipUpdateMessageStruct.Updates[0].Events[1]
@@ -50,7 +51,7 @@ func TestTupleMembershipUpdateEvent(t *testing.T) {
 	require.EqualValues(t, [][]interface{}{
 		{"clock-value", event2.ClockValue},
 		{"members", event2.Members},
-		{"type", "members-added"},
+		{"type", protobuf.MembershipUpdateEvent_MEMBERS_ADDED},
 	}, result2)
 }
 
@@ -72,12 +73,12 @@ func TestSignMembershipUpdate(t *testing.T) {
 					[
 						["clock-value", 156897373998501],
 						["name", "thathata"],
-						["type", "chat-created"]
+						["type", 1]
 					],
 					[
 						["clock-value", 156897373998502],
 						["members", ["0x04aebe2bb01a988abe7d978662f21de7760486119876c680e5a559e38e086a2df6dad41c4e4d9079c03db3bced6cb70fca76afc5650e50ea19b81572046a813534"]],
-						["type", "members-added"]
+						["type", 3]
 					]
 				],
 				"072ea460-84d3-53c5-9979-1ca36fb5d1020x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1"
@@ -356,7 +357,7 @@ func TestMembershipUpdateMessageProcess(t *testing.T) {
 
 func TestMembershipUpdateEventEqual(t *testing.T) {
 	u1 := MembershipUpdateEvent{
-		Type:       MembershipUpdateChatCreated,
+		Type:       protobuf.MembershipUpdateEvent_CHAT_CREATED,
 		ClockValue: 1,
 		Member:     "0xabc",
 		Members:    []string{"0xabc"},
@@ -369,7 +370,7 @@ func TestMembershipUpdateEventEqual(t *testing.T) {
 	u2.Members = append(u2.Members, "0xdef")
 	require.False(t, u1.Equal(u2))
 	u2 = u1
-	u2.Type = MembershipUpdateMembersAdded
+	u2.Type = protobuf.MembershipUpdateEvent_MEMBERS_ADDED
 	require.False(t, u1.Equal(u2))
 	u2 = u1
 	u2.ClockValue = 2

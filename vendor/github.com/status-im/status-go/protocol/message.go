@@ -112,7 +112,7 @@ func (m *Message) MarshalJSON() ([]byte, error) {
 
 func (m *Message) UnmarshalJSON(data []byte) error {
 	type Alias Message
-	aux := &struct {
+	aux := struct {
 		*Alias
 		ResponseTo  string                           `json:"responseTo"`
 		EnsName     string                           `json:"ensName"`

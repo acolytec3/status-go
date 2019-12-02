@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"bytes"
 	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
@@ -11,20 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/status-im/status-go/eth-node/crypto"
 	"github.com/status-im/status-go/eth-node/types"
-)
-
-const (
-	MembershipUpdateChatCreated   = "chat-created"
-	MembershipUpdateNameChanged   = "name-changed"
-	MembershipUpdateMembersAdded  = "members-added"
-	MembershipUpdateMemberJoined  = "member-joined"
-	MembershipUpdateMemberRemoved = "member-removed"
-	MembershipUpdateAdminsAdded   = "admins-added"
-	MembershipUpdateAdminRemoved  = "admin-removed"
+	"github.com/status-im/status-go/protocol/protobuf"
 )
 
 // MembershipUpdateMessage is a message used to propagate information
@@ -49,14 +40,73 @@ func (m *MembershipUpdateMessage) Verify() error {
 	return nil
 }
 
+func MembershipUpdateEventFromProtobuf(raw *protobuf.MembershipUpdateEvent) (m MembershipUpdateEvent) {
+	return MembershipUpdateEvent{
+		ClockValue: int64(raw.Clock),
+		Members:    raw.Members,
+		Member:     raw.Member,
+		Name:       raw.Name,
+		Type:       raw.Type,
+	}
+}
+
+func (m *MembershipUpdateEvent) ToProtobuf() *protobuf.MembershipUpdateEvent {
+	return &protobuf.MembershipUpdateEvent{
+		Clock:   uint64(m.ClockValue),
+		Members: m.Members,
+		Member:  m.Member,
+		Name:    m.Name,
+		Type:    m.Type,
+	}
+}
+
+func MembershipUpdateFromProtobuf(raw *protobuf.MembershipUpdate) (m MembershipUpdate) {
+	var events []MembershipUpdateEvent
+	for _, e := range raw.Events {
+		events = append(events, MembershipUpdateEventFromProtobuf(e))
+	}
+	return MembershipUpdate{
+		Signature: raw.Signature,
+		Events:    events,
+	}
+}
+
+func (m *MembershipUpdate) ToProtobuf() *protobuf.MembershipUpdate {
+	var events []*protobuf.MembershipUpdateEvent
+	for _, e := range m.Events {
+		events = append(events, e.ToProtobuf())
+	}
+	return &protobuf.MembershipUpdate{
+		Signature: m.Signature,
+		Events:    events,
+	}
+}
+
+func (m *MembershipUpdateMessage) ToProtobuf() *protobuf.MembershipUpdateMessage {
+	var membershipUpdates []*protobuf.MembershipUpdate
+	for _, u := range m.Updates {
+		membershipUpdates = append(membershipUpdates, u.ToProtobuf())
+	}
+	return &protobuf.MembershipUpdateMessage{
+		ChatId:  m.ChatID,
+		Updates: membershipUpdates,
+	}
+}
+
+func MembershipUpdateMessageFromProtobuf(raw protobuf.MembershipUpdateMessage) (m *MembershipUpdateMessage) {
+	var updates []MembershipUpdate
+	for _, u := range raw.Updates {
+		updates = append(updates, MembershipUpdateFromProtobuf(u))
+	}
+	return &MembershipUpdateMessage{
+		ChatID:  raw.ChatId,
+		Updates: updates,
+	}
+}
+
 // EncodeMembershipUpdateMessage encodes a MembershipUpdateMessage using Transit serialization.
 func EncodeMembershipUpdateMessage(value MembershipUpdateMessage) ([]byte, error) {
-	var buf bytes.Buffer
-	encoder := NewMessageEncoder(&buf)
-	if err := encoder.Encode(value); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return proto.Marshal(value.ToProtobuf())
 }
 
 type MembershipUpdate struct {
@@ -112,11 +162,11 @@ func (u *MembershipUpdate) Flat() []MembershipUpdateFlat {
 // MembershipUpdateEvent contains an event information.
 // Member and Members are hex-encoded values with 0x prefix.
 type MembershipUpdateEvent struct {
-	Type       string   `json:"type"`
-	ClockValue int64    `json:"clockValue"`
-	Member     string   `json:"member,omitempty"`  // in "member-joined", "member-removed" and "admin-removed" events
-	Members    []string `json:"members,omitempty"` // in "members-added" and "admins-added" events
-	Name       string   `json:"name,omitempty"`    // name of the group chat
+	Type       protobuf.MembershipUpdateEvent_EventType `json:"type"`
+	ClockValue int64                                    `json:"clockValue"`
+	Member     string                                   `json:"member,omitempty"`  // in "member-joined", "member-removed" and "admin-removed" events
+	Members    []string                                 `json:"members,omitempty"` // in "members-added" and "admins-added" events
+	Name       string                                   `json:"name,omitempty"`    // name of the group chat
 }
 
 func (u MembershipUpdateEvent) Equal(update MembershipUpdateEvent) bool {
@@ -159,7 +209,7 @@ func MergeFlatMembershipUpdates(dest []MembershipUpdateFlat, src []MembershipUpd
 
 func NewChatCreatedEvent(name string, admin string, clock int64) MembershipUpdateEvent {
 	return MembershipUpdateEvent{
-		Type:       MembershipUpdateChatCreated,
+		Type:       protobuf.MembershipUpdateEvent_CHAT_CREATED,
 		Name:       name,
 		Member:     admin,
 		ClockValue: clock,
@@ -168,7 +218,7 @@ func NewChatCreatedEvent(name string, admin string, clock int64) MembershipUpdat
 
 func NewNameChangedEvent(name string, clock int64) MembershipUpdateEvent {
 	return MembershipUpdateEvent{
-		Type:       MembershipUpdateNameChanged,
+		Type:       protobuf.MembershipUpdateEvent_NAME_CHANGED,
 		Name:       name,
 		ClockValue: clock,
 	}
@@ -176,7 +226,7 @@ func NewNameChangedEvent(name string, clock int64) MembershipUpdateEvent {
 
 func NewMembersAddedEvent(members []string, clock int64) MembershipUpdateEvent {
 	return MembershipUpdateEvent{
-		Type:       MembershipUpdateMembersAdded,
+		Type:       protobuf.MembershipUpdateEvent_MEMBERS_ADDED,
 		Members:    members,
 		ClockValue: clock,
 	}
@@ -184,7 +234,7 @@ func NewMembersAddedEvent(members []string, clock int64) MembershipUpdateEvent {
 
 func NewMemberJoinedEvent(member string, clock int64) MembershipUpdateEvent {
 	return MembershipUpdateEvent{
-		Type:       MembershipUpdateMemberJoined,
+		Type:       protobuf.MembershipUpdateEvent_MEMBER_JOINED,
 		Member:     member,
 		ClockValue: clock,
 	}
@@ -192,7 +242,7 @@ func NewMemberJoinedEvent(member string, clock int64) MembershipUpdateEvent {
 
 func NewAdminsAddedEvent(admins []string, clock int64) MembershipUpdateEvent {
 	return MembershipUpdateEvent{
-		Type:       MembershipUpdateAdminsAdded,
+		Type:       protobuf.MembershipUpdateEvent_ADMINS_ADDED,
 		Members:    admins,
 		ClockValue: clock,
 	}
@@ -200,7 +250,7 @@ func NewAdminsAddedEvent(admins []string, clock int64) MembershipUpdateEvent {
 
 func NewMemberRemovedEvent(member string, clock int64) MembershipUpdateEvent {
 	return MembershipUpdateEvent{
-		Type:       MembershipUpdateMemberRemoved,
+		Type:       protobuf.MembershipUpdateEvent_MEMBER_REMOVED,
 		Member:     member,
 		ClockValue: clock,
 	}
@@ -208,7 +258,7 @@ func NewMemberRemovedEvent(member string, clock int64) MembershipUpdateEvent {
 
 func NewAdminRemovedEvent(admin string, clock int64) MembershipUpdateEvent {
 	return MembershipUpdateEvent{
-		Type:       MembershipUpdateAdminRemoved,
+		Type:       protobuf.MembershipUpdateEvent_ADMIN_REMOVED,
 		Member:     admin,
 		ClockValue: clock,
 	}
@@ -376,7 +426,7 @@ func (g Group) Admins() []string {
 func (g Group) Joined() []string {
 	var result []string
 	for _, update := range g.updates {
-		if update.Type == MembershipUpdateMemberJoined {
+		if update.Type == protobuf.MembershipUpdateEvent_MEMBER_JOINED {
 			result = append(result, update.Member)
 		}
 	}
@@ -424,7 +474,7 @@ func (g Group) creator() (string, error) {
 		return "", errors.New("no events in the group")
 	}
 	first := g.updates[0]
-	if first.Type != MembershipUpdateChatCreated {
+	if first.Type != protobuf.MembershipUpdateEvent_CHAT_CREATED {
 		return "", fmt.Errorf("expected first event to be 'chat-created', got %s", first.Type)
 	}
 	return first.From, nil
@@ -443,20 +493,20 @@ func (g Group) validateChatID(chatID string) bool {
 // validateEvent returns true if a given event is valid.
 func (g Group) validateEvent(from string, event MembershipUpdateEvent) bool {
 	switch event.Type {
-	case MembershipUpdateChatCreated:
+	case protobuf.MembershipUpdateEvent_CHAT_CREATED:
 		return g.admins.Empty() && g.members.Empty()
-	case MembershipUpdateNameChanged:
+	case protobuf.MembershipUpdateEvent_NAME_CHANGED:
 		return g.admins.Has(from) && len(event.Name) > 0
-	case MembershipUpdateMembersAdded:
+	case protobuf.MembershipUpdateEvent_MEMBERS_ADDED:
 		return g.admins.Has(from)
-	case MembershipUpdateMemberJoined:
+	case protobuf.MembershipUpdateEvent_MEMBER_JOINED:
 		return g.members.Has(from) && from == event.Member
-	case MembershipUpdateMemberRemoved:
+	case protobuf.MembershipUpdateEvent_MEMBER_REMOVED:
 		// Member can remove themselves or admin can remove a member.
 		return from == event.Member || (g.admins.Has(from) && !g.admins.Has(event.Member))
-	case MembershipUpdateAdminsAdded:
+	case protobuf.MembershipUpdateEvent_ADMINS_ADDED:
 		return g.admins.Has(from) && stringSliceSubset(event.Members, g.members.List())
-	case MembershipUpdateAdminRemoved:
+	case protobuf.MembershipUpdateEvent_ADMIN_REMOVED:
 		return g.admins.Has(from) && from == event.Member
 	default:
 		return false
@@ -465,21 +515,21 @@ func (g Group) validateEvent(from string, event MembershipUpdateEvent) bool {
 
 func (g *Group) processEvent(from string, event MembershipUpdateEvent) {
 	switch event.Type {
-	case MembershipUpdateChatCreated:
+	case protobuf.MembershipUpdateEvent_CHAT_CREATED:
 		g.name = event.Name
 		g.members.Add(event.Member)
 		g.admins.Add(event.Member)
-	case MembershipUpdateNameChanged:
+	case protobuf.MembershipUpdateEvent_NAME_CHANGED:
 		g.name = event.Name
-	case MembershipUpdateAdminsAdded:
+	case protobuf.MembershipUpdateEvent_ADMINS_ADDED:
 		g.admins.Add(event.Members...)
-	case MembershipUpdateAdminRemoved:
+	case protobuf.MembershipUpdateEvent_ADMIN_REMOVED:
 		g.admins.Remove(event.Member)
-	case MembershipUpdateMembersAdded:
+	case protobuf.MembershipUpdateEvent_MEMBERS_ADDED:
 		g.members.Add(event.Members...)
-	case MembershipUpdateMemberRemoved:
+	case protobuf.MembershipUpdateEvent_MEMBER_REMOVED:
 		g.members.Remove(event.Member)
-	case MembershipUpdateMemberJoined:
+	case protobuf.MembershipUpdateEvent_MEMBER_JOINED:
 		g.members.Add(event.Member)
 	}
 }

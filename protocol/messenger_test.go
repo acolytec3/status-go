@@ -1042,7 +1042,7 @@ func (s *MessengerSuite) TestChatPersistencePrivateGroupChat() {
 		MembershipUpdates: []ChatMembershipUpdate{
 			ChatMembershipUpdate{
 				ID:         "1",
-				Type:       "type-1",
+				Type:       protobuf.MembershipUpdateEvent_CHAT_CREATED,
 				Name:       "name-1",
 				ClockValue: 1,
 				Signature:  "signature-1",
@@ -1052,7 +1052,7 @@ func (s *MessengerSuite) TestChatPersistencePrivateGroupChat() {
 			},
 			ChatMembershipUpdate{
 				ID:         "2",
-				Type:       "type-2",
+				Type:       protobuf.MembershipUpdateEvent_MEMBERS_ADDED,
 				Name:       "name-2",
 				ClockValue: 2,
 				Signature:  "signature-2",

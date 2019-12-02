@@ -8,6 +8,7 @@ import (
 
 	"github.com/status-im/status-go/eth-node/crypto"
 	"github.com/status-im/status-go/eth-node/types"
+	"github.com/status-im/status-go/protocol/protobuf"
 	v1protocol "github.com/status-im/status-go/protocol/v1"
 )
 
@@ -119,8 +120,8 @@ func (c *Chat) updateChatFromProtocolGroup(g *v1protocol.Group) {
 type ChatMembershipUpdate struct {
 	// Unique identifier for the event
 	ID string `json:"id"`
-	// Type indicates the kind of event (i.e changed-name, added-member, etc)
-	Type string `json:"type"`
+	// Type indicates the kind of event
+	Type protobuf.MembershipUpdateEvent_EventType `json:"type"`
 	// Name represents the name in the event of changing name events
 	Name string `json:"name,omitempty"`
 	// Clock value of the event

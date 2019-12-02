@@ -288,7 +288,6 @@ func NewMessenger(
 		database,
 		encryptionProtocol,
 		t,
-		newPersistentMessageHandler(&sqlitePersistence{db: database}),
 		logger,
 		c.featureFlags,
 	)
@@ -652,19 +651,21 @@ func (m *Messenger) ReSendChatMessage(ctx context.Context, messageID string) (*M
 	case ChatTypeOneToOne:
 		publicKey := crypto.FromECDSAPub(chat.PublicKey)
 		logger.Debug("re-sending private message", zap.Binary("publicKey", publicKey))
-		id, err := m.processor.SendPrivateRaw(ctx, chat.PublicKey, message.RawPayload)
+		id, err := m.processor.SendPrivateRaw(ctx, chat.PublicKey, message.RawPayload, protobuf.ApplicationMetadataMessage_CHAT_MESSAGE)
 		if err != nil {
 			return nil, err
 		}
 		message.ID = "0x" + hex.EncodeToString(id)
-		err = m.sendToPairedDevices(ctx, message.RawPayload)
+		err = m.sendToPairedDevices(ctx, message.RawPayload, protobuf.ApplicationMetadataMessage_CHAT_MESSAGE)
+
 		if err != nil {
 			return nil, err
 		}
 
 	case ChatTypePublic:
 		logger.Debug("re-sending public message", zap.String("chatName", chat.Name))
-		id, err := m.processor.SendPublicRaw(ctx, chat.ID, message.RawPayload)
+		id, err := m.processor.SendPublicRaw(ctx, chat.ID, message.RawPayload, protobuf.ApplicationMetadataMessage_CHAT_MESSAGE)
+
 		if err != nil {
 			return nil, err
 		}
@@ -683,14 +684,16 @@ func (m *Messenger) ReSendChatMessage(ctx context.Context, messageID string) (*M
 				n++
 			}
 		}
-		id, err := m.processor.SendGroupRaw(ctx, recipients[:n], message.RawPayload)
+		id, err := m.processor.SendGroupRaw(ctx, recipients[:n], message.RawPayload, protobuf.ApplicationMetadataMessage_CHAT_MESSAGE)
+
 		if err != nil {
 			return nil, err
 		}
 
 		message.ID = "0x" + hex.EncodeToString(id)
 
-		err = m.sendToPairedDevices(ctx, message.RawPayload)
+		err = m.sendToPairedDevices(ctx, message.RawPayload, protobuf.ApplicationMetadataMessage_CHAT_MESSAGE)
+
 		if err != nil {
 			return nil, err
 		}
@@ -705,14 +708,14 @@ func (m *Messenger) ReSendChatMessage(ctx context.Context, messageID string) (*M
 }
 
 // sendToPairedDevices will check if we have any paired devices and send to them if necessary
-func (m *Messenger) sendToPairedDevices(ctx context.Context, payload []byte) error {
+func (m *Messenger) sendToPairedDevices(ctx context.Context, payload []byte, messageType protobuf.ApplicationMetadataMessage_MessageType) error {
 	activeInstallations, err := m.encryptor.GetOurActiveInstallations(&m.identity.PublicKey)
 	if err != nil {
 		return err
 	}
 	// We send a message to any paired device
 	if len(activeInstallations) > 1 {
-		_, err := m.processor.SendPrivateRaw(ctx, &m.identity.PublicKey, payload)
+		_, err := m.processor.SendPrivateRaw(ctx, &m.identity.PublicKey, payload, messageType)
 		if err != nil {
 			return err
 		}
@@ -773,13 +776,15 @@ func (m *Messenger) SendChatMessage(ctx context.Context, message *Message) (*Mes
 		}
 		message.RawPayload = encodedMessage
 
-		id, err := m.processor.SendPrivateRaw(ctx, chat.PublicKey, encodedMessage)
+		id, err := m.processor.SendPrivateRaw(ctx, chat.PublicKey, encodedMessage, protobuf.ApplicationMetadataMessage_CHAT_MESSAGE)
+
 		if err != nil {
 			return nil, err
 		}
 		message.ID = "0x" + hex.EncodeToString(id)
 
-		err = m.sendToPairedDevices(ctx, encodedMessage)
+		err = m.sendToPairedDevices(ctx, encodedMessage, protobuf.ApplicationMetadataMessage_CHAT_MESSAGE)
+
 		if err != nil {
 			return nil, err
 		}
@@ -793,7 +798,8 @@ func (m *Messenger) SendChatMessage(ctx context.Context, message *Message) (*Mes
 		}
 		message.RawPayload = encodedMessage
 
-		id, err := m.processor.SendPublicRaw(ctx, chat.ID, encodedMessage)
+		id, err := m.processor.SendPublicRaw(ctx, chat.ID, encodedMessage, protobuf.ApplicationMetadataMessage_CHAT_MESSAGE)
+
 		if err != nil {
 			return nil, err
 		}
@@ -820,14 +826,16 @@ func (m *Messenger) SendChatMessage(ctx context.Context, message *Message) (*Mes
 				n++
 			}
 		}
-		id, err := m.processor.SendGroupRaw(ctx, recipients[:n], encodedMessage)
+		id, err := m.processor.SendGroupRaw(ctx, recipients[:n], encodedMessage, protobuf.ApplicationMetadataMessage_CHAT_MESSAGE)
+
 		if err != nil {
 			return nil, err
 		}
 
 		message.ID = "0x" + hex.EncodeToString(id)
 
-		err = m.sendToPairedDevices(ctx, encodedMessage)
+		err = m.sendToPairedDevices(ctx, encodedMessage, protobuf.ApplicationMetadataMessage_CHAT_MESSAGE)
+
 		if err != nil {
 			return nil, err
 		}
@@ -866,9 +874,9 @@ func (m *Messenger) SendChatMessage(ctx context.Context, message *Message) (*Mes
 // DEPRECATED
 func (m *Messenger) SendRaw(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
 	if chat.PublicKey != nil {
-		return m.processor.SendPrivateRaw(ctx, chat.PublicKey, data)
+		return m.processor.SendPrivateRaw(ctx, chat.PublicKey, data, protobuf.ApplicationMetadataMessage_UNKNOWN)
 	} else if chat.Name != "" {
-		return m.processor.SendPublicRaw(ctx, chat.Name, data)
+		return m.processor.SendPublicRaw(ctx, chat.Name, data, protobuf.ApplicationMetadataMessage_UNKNOWN)
 	}
 	return nil, errors.New("chat is neither public nor private")
 }
@@ -968,7 +976,22 @@ func (m *Messenger) handleRetrievedMessages(chatWithMessages map[transport.Filte
 				}
 
 				if msg.ParsedMessage != nil {
-					if textMessage, ok := msg.ParsedMessage.(protobuf.ChatMessage); ok {
+					switch msg.ParsedMessage.(type) {
+					case protobuf.MembershipUpdateMessage:
+
+						rawMembershipUpdate := msg.ParsedMessage.(protobuf.MembershipUpdateMessage)
+						membershipUpdate := v1protocol.MembershipUpdateMessageFromProtobuf(rawMembershipUpdate)
+						chat, err := HandleMembershipUpdate(allChatsMap[membershipUpdate.ChatID], membershipUpdate)
+						if err != nil {
+							logger.Warn("failed to process membership update", zap.Error(err))
+							continue
+						}
+
+						// Set in the map
+						allChatsMap[chat.ID] = chat
+
+					case protobuf.ChatMessage:
+						textMessage := msg.ParsedMessage.(protobuf.ChatMessage)
 						receivedMessage := &Message{
 							ID:               messageID,
 							ChatMessage:      textMessage,
@@ -1024,12 +1047,12 @@ func (m *Messenger) handleRetrievedMessages(chatWithMessages map[transport.Filte
 						allChatsMap[chat.ID] = chat
 						// Add to response
 						response.Messages = append(response.Messages, receivedMessage)
-					}
-				} else {
-					// RawMessage, not processed here, pass straight to the client
-					rawMessages[chat] = append(rawMessages[chat], msg)
-				}
+					default:
+						// RawMessage, not processed here, pass straight to the client
+						rawMessages[chat] = append(rawMessages[chat], msg)
 
+					}
+				}
 			}
 		}
 	}

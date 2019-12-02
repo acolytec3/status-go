@@ -459,6 +459,27 @@ func (api *PublicAPI) SendDirectMessage(ctx context.Context, msg SendDirectMessa
 	return api.service.messenger.SendRaw(ctx, chat, msg.Payload)
 }
 
+func (api *PublicAPI) Join(chat protocol.Chat) error {
+	return api.service.messenger.Join(chat)
+}
+
+func (api *PublicAPI) Leave(chat protocol.Chat) error {
+	return api.service.messenger.Leave(chat)
+}
+
+func (api *PublicAPI) CreateGroupChat(name string) (*protocol.Chat, error) {
+	return api.service.messenger.CreateGroupChat(name)
+}
+
+func (api *PublicAPI) AddMembersToChat(ctx Context, chat *protocol.Chat, members []string) error {
+	return nil
+	//return api.service.messenger.AddMembersToChat(ctx, chat, members)
+}
+
+func (api *PublicAPI) ConfirmJoiningGroup(ctx context.Context, chat *protocol.Chat) error {
+	return api.service.messenger.ConfirmJoiningGroup(ctx, chat)
+}
+
 func (api *PublicAPI) requestMessagesUsingPayload(request db.HistoryRequest, peer, symkeyID string, payload []byte, force bool, timeout time.Duration, topics []types.TopicType) (hash types.Hash, err error) {
 	shh := api.service.w
 	now := api.service.w.GetCurrentTime()
